@@ -8,11 +8,26 @@ for a **12-hole solo-tuned chromatic in C**.
 
 ## Run it
 
+Drop a photo in and get tab back, in a browser:
+
 ```bash
 pip install -r requirements.txt
+python3 serve.py           # then open http://localhost:8000
+```
+
+The pipeline is numpy/scipy so it cannot run in a browser; `serve.py` serves
+the page and does the work locally. Nothing leaves the machine. HEIC is
+handled, and the page may be sideways -- the rotation is worked out by trying
+each quarter turn and keeping whichever finds the most staves. About 5 seconds
+for a full page. Both the studio and the published chart have a **Save as PDF**
+button, which prints through the browser's own engine rather than bundling a
+PDF library.
+
+Or run the committed pages straight through:
+
+```bash
 python3 transcribe.py      # scans -> out/systems.json, out/bars.json, out/tab.txt
 python3 build_web.py       # out/systems.json -> web/harp.html
-open web/harp.html
 ```
 
 Per-page inspection, which is how you check the machine's work:
@@ -108,9 +123,11 @@ published per *system* rather than per bar.
 
 ### Next things worth doing
 
-1. Barline detection is the highest-value fix — it's what gates the `draft`
-   flags. Current approach: full-height vertical strokes that don't overshoot
-   the staff and aren't adjacent to a notehead.
+1. Barline detection is still the highest-value fix — it's what gates the
+   `draft` flags, and only 9 of 21 systems reconcile. A candidate must be a
+   single contiguous stroke spanning the staff without overshooting it, and
+   not sit beside a notehead. Sweeping those thresholds does not help; the
+   remaining failures are not a threshold problem.
 2. Beam/flag counting would give durations and make real rhythm possible.
 3. Tie detection (arc between two same-pitch heads) would fix the doubles.
 4. Beam/flag counting for durations, and repeat/D.S./Coda navigation.
@@ -186,9 +203,11 @@ extract.py          per-page extraction + verification overlays
 inspect_system.py   one system, zoomed, with a step table
 transcribe.py       pitches -> tab; writes out/
 build_web.py        out/systems.json -> web/harp.html (idempotent)
+serve.py            local upload UI; photo in, tab out, nothing uploaded
 scans/              page1.png, page2.png, original/ (the HEIC photos)
 out/                systems.json, bars.json, tab.txt, overlays/
 web/harp.html       the full transcription + note chart, self-contained
+web/studio.html     the upload front end that serve.py serves
 ```
 
 `web/harp.html` is the published tab sheet: every system of the chart, plus a

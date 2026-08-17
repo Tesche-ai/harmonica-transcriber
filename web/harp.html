@@ -267,13 +267,42 @@ th.brs{white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:600
 .bdg.draft{color:var(--ink-3)}
 .btn.tiny{padding:4px 9px;font-size:10px}
 
+
+/* ---------- print / PDF ---------- */
+.toolbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+@media print{
+  @page{size:A4 portrait;margin:12mm}
+  html,body{background:#fff}
+  body{padding:0;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .wrap{max-width:none;gap:14px}
+  .noprint{display:none !important}
+  .panel{box-shadow:none;border:1px solid #ccc;padding:10px;background:#fff}
+  h2{font-size:15px}
+  .hint,.legend{font-size:9px}
+  /* the screen version scrolls these sideways; on paper they must wrap into
+     the page width instead of being clipped at the margin */
+  .chart-scroll{overflow:visible;border:0}
+  table{width:100%;min-width:0}
+  .tabcell{min-width:0;font-size:10px;line-height:1.75}
+  th.brs{font-size:9px}
+  tr,section,.how div{break-inside:avoid}
+  thead th{position:static}
+  th.rowhead,th.brs{position:static}
+  .how{grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .how p{font-size:9px}
+  footer{font-size:8px}
+}
+
 @media (prefers-reduced-motion:reduce){*{transition:none !important}}
 </style>
 
 <div class="wrap">
 
   <section class="panel" id="score">
-    <h2>Corra e Olhe o Céu — the whole chart</h2>
+    <div class="toolbar">
+      <h2>Corra e Olhe o Céu — the whole chart</h2>
+      <button class="btn noprint" id="pdf">Save as PDF</button>
+    </div>
     <p class="hint" style="margin-top:-8px">
       Read off your two photos: 134 bars, key of D, for a 12-hole C chromatic.
       <b>Checked</b> lines reconcile with the printed bar numbers on the page.
@@ -293,24 +322,24 @@ th.brs{white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:600
 <tr><th class="brs">25&ndash;27<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-5</i> <i class="bw">6</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="bl">|</i> <i class="bw">6</i> <i class="bw">5*</i> <i class="dr">-3</i> <i class="bw">3*</i></td></tr>
 <tr class="secrow"><td colspan="2">Instrumental</td></tr>
 <tr><th class="brs">32&ndash;38<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="dr">-3</i> <i class="bw">3*</i> <i class="dr">-3</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bw">4*</i> <i class="bl">|</i> <i class="dr">-3</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bw">4*</i> <i class="bl">|</i> <i class="bw">4*</i> <i class="bl">|</i> <i class="dr">-1</i> <i class="bw">2</i> <i class="bw">3</i> <i class="dr">-4</i> <i class="dr">-1</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bl">|</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="bw">2</i></td></tr>
-<tr><th class="brs">39&ndash;45<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="bw">2</i> <i class="bw">3</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="bw">4</i> <i class="bw">4*</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-4</i> <i class="dr">-1</i> <i class="dr">-1</i> <i class="bw">3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bw">3*</i> <i class="dr">-3</i> <i class="dr">-2*</i></td></tr>
-<tr><th class="brs">46&ndash;50<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bw">2</i> <i class="bw">3*</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="oor">X</i> <i class="dr">-1</i> <i class="bl">|</i> <i class="bw">1*</i> <i class="bw">3</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="dr">-6*</i></td></tr>
+<tr><th class="brs">39&ndash;44<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">2</i> <i class="bw">3</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="bw">4</i> <i class="bw">4*</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-4</i> <i class="dr">-1</i> <i class="dr">-1</i> <i class="bw">3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bw">3*</i> <i class="dr">-3</i> <i class="dr">-2*</i></td></tr>
+<tr><th class="brs">46&ndash;49<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bw">2</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="oor">X</i> <i class="dr">-1</i> <i class="bl">|</i> <i class="bw">1*</i> <i class="bw">3</i> <i class="dr">-5</i> <i class="dr">-6*</i></td></tr>
 <tr><th class="brs">52&ndash;56<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-7</i> <i class="dr">-6*</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="bw">5*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="bw">5</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="dr">-4</i> <i class="bw">7</i></td></tr>
-<tr><th class="brs">58&ndash;62<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="bw">7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="bw">7</i> <i class="bl">|</i> <i class="bw">7</i> <i class="dr">-5</i> <i class="bw">6</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="bw">6</i> <i class="dr">-6*</i> <i class="dr">-7</i></td></tr>
+<tr><th class="brs">58&ndash;63<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="bw">7</i> <i class="bl">|</i> <i class="bw">7</i> <i class="dr">-5</i> <i class="bw">6</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="bw">6</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="dr">-7</i></td></tr>
 <tr class="secrow"><td colspan="2">Instrumental (cont.)</td></tr>
-<tr><th class="brs">63&ndash;69<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-8</i> <i class="bw">7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="bw">5*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="bl">|</i> <i class="bw">5*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="dr">-6</i> <i class="dr">-6*</i> <i class="bw">7</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-8</i></td></tr>
-<tr><th class="brs">69&ndash;73<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">8*</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="bw">8</i> <i class="bw">8*</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bw">7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="dr">-6</i> <i class="dr">-6*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="bw">6</i> <i class="bl">|</i> <i class="dr">-5*</i> <i class="dr">-5</i></td></tr>
+<tr><th class="brs">63&ndash;68<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="dr">-8</i> <i class="bw">7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="bw">5*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="bl">|</i> <i class="bw">5*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="dr">-6</i> <i class="dr">-6*</i> <i class="bw">7</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-8</i></td></tr>
+<tr><th class="brs">69&ndash;75<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="bw">8*</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="bw">8</i> <i class="bw">8*</i> <i class="bl">|</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bw">7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="dr">-6</i> <i class="dr">-6*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="bw">6</i> <i class="bl">|</i> <i class="dr">-5*</i> <i class="dr">-5</i></td></tr>
 <tr><th class="brs">76&ndash;80<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">8*</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="dr">-6*</i> <i class="dr">-7</i> <i class="bw">8*</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="bw">8*</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bw">7</i> <i class="dr">-6*</i> <i class="dr">-6</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="dr">-5</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="dr">-3*</i> <i class="dr">-4</i> <i class="dr">-7</i> <i class="dr">-6*</i></td></tr>
 <tr class="secrow"><td colspan="2">A2 - solo</td></tr>
 <tr><th class="brs">82&ndash;82<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">6</i> <i class="dr">-5</i></td></tr>
 <tr><th class="brs">89&ndash;95<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i></td></tr>
 <tr class="secrow"><td colspan="2">A2</td></tr>
 <tr><th class="brs">96&ndash;100<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-5</i> <i class="dr">-5</i> <i class="bw">6</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="bl">|</i> <i class="dr">-6*</i> <i class="bw">7</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-6*</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="bw">6</i> <i class="dr">-6*</i> <i class="dr">-5</i> <i class="bw">5*</i></td></tr>
-<tr><th class="brs">102&ndash;107<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="dr">-1</i> <i class="dr">-4</i> <i class="bw">2</i> <i class="dr">-2*</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="dr">-1*</i> <i class="bw">2</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="dr">-3</i></td></tr>
-<tr><th class="brs">108&ndash;115<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-4</i> <i class="bw">4*</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-4</i> <i class="dr">-1</i> <i class="dr">-1</i> <i class="bw">3</i> <i class="bl">|</i> <i class="bw">3</i> <i class="bw">3</i> <i class="dr">-2*</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="bw">2</i> <i class="bw">3</i> <i class="dr">-2*</i> <i class="bw">2</i> <i class="oor">X</i></td></tr>
+<tr><th class="brs">102&ndash;106<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-1</i> <i class="dr">-4</i> <i class="bw">2</i> <i class="dr">-2*</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="bw">3</i> <i class="bw">3</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="dr">-3</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="dr">-1*</i> <i class="bw">2</i> <i class="bl">|</i> <i class="bw">3*</i> <i class="dr">-3</i></td></tr>
+<tr><th class="brs">108&ndash;114<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="dr">-4</i> <i class="bw">4*</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-4</i> <i class="dr">-1</i> <i class="dr">-1</i> <i class="bw">3</i> <i class="bl">|</i> <i class="bw">3</i> <i class="bw">3</i> <i class="dr">-2*</i> <i class="bw">3*</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="bw">2</i> <i class="bw">3</i> <i class="dr">-2*</i> <i class="bw">2</i> <i class="oor">X</i></td></tr>
 <tr class="secrow"><td colspan="2">Coda</td></tr>
 <tr><th class="brs">115&ndash;120<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="dr">-3*</i> <i class="dr">-3</i> <i class="dr">-3</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="bw">6</i> <i class="dr">-5</i> <i class="bw">5*</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bw">3</i> <i class="dr">-2*</i></td></tr>
-<tr><th class="brs">122&ndash;128<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">3</i> <i class="bw">2</i> <i class="bw">3*</i> <i class="dr">-4</i> <i class="dr">-5</i> <i class="dr">-6*</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="bw">6</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bw">7*</i> <i class="dr">-7</i> <i class="bw">8</i> <i class="dr">-8</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="bw">2</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">2</i> <i class="dr">-1*</i> <i class="dr">-1</i> <i class="bw">2</i> <i class="dr">-3</i></td></tr>
+<tr><th class="brs">122&ndash;127<br><span class="bdg ok">checked</span></th><td class="tabcell"><i class="bw">3</i> <i class="bw">2</i> <i class="bw">3*</i> <i class="dr">-4</i> <i class="dr">-5</i> <i class="dr">-6*</i> <i class="dr">-6*</i> <i class="bl">|</i> <i class="bw">6</i> <i class="dr">-7</i> <i class="bl">|</i> <i class="dr">-7</i> <i class="dr">-8</i> <i class="dr">-7</i> <i class="bw">7*</i> <i class="dr">-7</i> <i class="bw">8</i> <i class="dr">-8</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="bw">2</i> <i class="bl">|</i> <i class="rst">&middot;</i> <i class="bl">|</i> <i class="dr">-2*</i> <i class="bw">2</i> <i class="dr">-1*</i> <i class="dr">-1</i> <i class="bw">2</i> <i class="dr">-3</i></td></tr>
 <tr><th class="brs">128&ndash;133<br><span class="bdg draft">draft</span></th><td class="tabcell"><i class="bw">3</i> <i class="dr">-4</i> <i class="bl">|</i> <i class="dr">-4</i> <i class="dr">-3</i> <i class="bw">3*</i> <i class="bw">3</i> <i class="dr">-3</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="dr">-5</i> <i class="bw">6</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="dr">-5</i> <i class="dr">-5</i> <i class="bl">|</i> <i class="dr">-5</i> <i class="dr">-5</i> <i class="dr">-5</i></td></tr>
         </tbody>
       </table>
@@ -390,5 +419,11 @@ th.brs{white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:600
     head += "</tr>";
   });
   document.getElementById("chart").innerHTML = head + "</tbody>";
+
+  // Print-to-PDF rather than generating one: the browser's own engine handles
+  // pagination and font embedding, and it needs no library, which keeps the
+  // page self-contained.
+  var pdf = document.getElementById("pdf");
+  if (pdf) pdf.addEventListener("click", function(){ window.print(); });
 })();
 </script>

@@ -141,7 +141,8 @@ def line_y(sysm, x, k):
     f = sysm.get("fit")
     if f is None:
         f = fit_system(sysm)["fit"]
-    return float(np.polyval(f["centre"], x) + (k - 2) * np.polyval(f["spacing"], x))
+    y = np.polyval(f["centre"], x) + (k - 2) * np.polyval(f["spacing"], x)
+    return y if np.ndim(x) else float(y)
 
 
 def step_at(sysm, x, y):

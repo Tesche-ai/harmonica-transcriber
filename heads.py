@@ -29,13 +29,18 @@ def disk(r):
 
 
 def find_heads(ink, space, ymin, ymax):
-    band = np.zeros_like(ink)
-    band[ymin:ymax] = ink[ymin:ymax]
+    # Work on the cropped band, not a page-sized array with a band pasted into
+    # it: the morphology below costs the whole page otherwise, once per system.
+    ymin = max(0, int(ymin))
+    ymax = min(ink.shape[0], int(ymax))
+    band = ink[ymin:ymax]
     # 1. remove staff lines (thin horizontal structures)
-    noline = vertical_run_filter(band, max_run=int(space * 0.35))
+    noline_c = vertical_run_filter(band, max_run=int(space * 0.35))
+    noline = np.zeros_like(ink)
+    noline[ymin:ymax] = noline_c
     # 2. fill any enclosed counters. No morphological closing here: it welds
     #    adjacent 16th-note heads into one blob and loses both.
-    filled = ndi.binary_fill_holes(noline)
+    filled = ndi.binary_fill_holes(noline_c)
     # 3. keep only blobs that can hold a notehead-sized disk
     r = max(3, int(round(space * 0.34)))
     opened = ndi.binary_opening(filled, structure=disk(r))
@@ -56,8 +61,11 @@ def find_heads(ink, space, ymin, ymax):
             continue
         if not (space * space * 0.62 <= area <= space * space * 1.35):
             continue
-        cy, cx = ndi.center_of_mass(lab == i)
-        heads.append({"x": float(cx), "y": float(cy), "w": wid, "h": hgt, "area": int(area)})
+        # centre of mass within the blob's own box; `lab == i` over the whole
+        # array would rebuild a page-sized mask for every notehead
+        cy, cx = ndi.center_of_mass(lab[sl] == i)
+        heads.append({"x": float(cx) + xs.start, "y": float(cy) + ys.start + ymin,
+                      "w": wid, "h": hgt, "area": int(area)})
     heads.sort(key=lambda d: d["x"])
     return heads, noline
 
@@ -71,8 +79,9 @@ def find_hollow(ink, space, ymin, ymax):
     A notehead counter is markedly flatter than the cells the staff lines and
     stems enclose, which is what separates the two.
     """
-    band = np.zeros_like(ink)
-    band[ymin:ymax] = ink[ymin:ymax]
+    ymin = max(0, int(ymin))
+    ymax = min(ink.shape[0], int(ymax))
+    band = ink[ymin:ymax]
     holes = ndi.binary_fill_holes(band) & ~band
     lab, n = ndi.label(holes)
     out = []
@@ -100,9 +109,9 @@ def find_hollow(ink, space, ymin, ymax):
         denom = win.size - holewin.sum()
         if denom <= 0 or annulus / denom < 0.78:
             continue
-        cy, cx = ndi.center_of_mass(lab == i)
-        out.append({"x": float(cx), "y": float(cy), "w": w, "h": h,
-                    "area": int(area), "hollow": True})
+        cy, cx = ndi.center_of_mass(lab[sl] == i)
+        out.append({"x": float(cx) + xs.start, "y": float(cy) + ys.start + ymin,
+                    "w": w, "h": h, "area": int(area), "hollow": True})
     out.sort(key=lambda d: d["x"])
     return out
 
@@ -117,7 +126,7 @@ def staff_free(ink, sysm, pad=3):
     out = ink.copy()
     xs = np.arange(ink.shape[1])
     for k in range(5):
-        ys = np.array([omr.line_y(sysm, float(x), k) for x in xs])
+        ys = omr.line_y(sysm, xs.astype(float), k)
         for dy in range(-pad, pad + 1):
             rows = np.clip((ys + dy).astype(int), 0, ink.shape[0] - 1)
             out[rows, xs] = False
@@ -168,16 +177,26 @@ def find_barlines(noline, sysm, space, head_xs=()):
     hgt = np.array([omr.line_y(sysm, float(x), 4) - omr.line_y(sysm, float(x), 0)
                     for x in xs])
     # A barline runs the full staff height and stops there. A stem also spans
-    # the staff but continues out to its beam, so measure the overshoot too.
-    up = np.zeros(w); dn = np.zeros(w)
-    for x in range(w):
-        col = np.flatnonzero(noline[:, x])
-        if len(col) == 0:
-            continue
-        t, b = omr.line_y(sysm, float(x), 0), omr.line_y(sysm, float(x), 4)
-        up[x] = max(0.0, t - col.min())
-        dn[x] = max(0.0, col.max() - b)
-    hot = (colsum >= hgt * 0.85) & (up < space * 0.75) & (dn < space * 0.75)
+    # the staff but continues out to its beam. Measure that on the contiguous
+    # stroke through the staff -- looking at all ink in the column instead lets
+    # an unrelated chord symbol or slur overhead disqualify a real barline.
+    allx = np.arange(w, dtype=float)
+    tops = omr.line_y(sysm, allx, 0)
+    bots = omr.line_y(sysm, allx, 4)
+    span = bots - tops
+    lo = int(max(0, tops.min() - space * 2))
+    hi = int(min(noline.shape[0], bots.max() + space * 2))
+    sub = noline[lo:hi]
+    hot = np.zeros(w, bool)
+    for x in np.flatnonzero(sub.sum(axis=0) >= 0.90 * span):
+        col = sub[:, x]
+        idx = np.flatnonzero(np.diff(np.concatenate(([0], col.view(np.int8), [0]))))
+        t, b = tops[x] - lo, bots[x] - lo
+        for a, e in zip(idx[0::2], idx[1::2]):
+            if (min(e, b) - max(a, t)) >= 0.90 * span[x] and \
+               (t - a) <= 0.60 * space and (e - b) <= 0.60 * space:
+                hot[x] = True
+                break
     bars, x = [], 0
     while x < len(hot):
         if hot[x]:
