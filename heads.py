@@ -107,6 +107,50 @@ def find_hollow(ink, space, ymin, ymax):
     return out
 
 
+def staff_free(ink, sysm, pad=3):
+    """Copy of the image with only the five fitted staff lines erased.
+
+    The vertical-run filter used for noteheads cannot be reused for ties: a tie
+    is a thin, near-horizontal stroke, so that filter deletes it along with the
+    staff lines. Masking the fitted lines instead leaves ties intact.
+    """
+    out = ink.copy()
+    xs = np.arange(ink.shape[1])
+    for k in range(5):
+        ys = np.array([omr.line_y(sysm, float(x), k) for x in xs])
+        for dy in range(-pad, pad + 1):
+            rows = np.clip((ys + dy).astype(int), 0, ink.shape[0] - 1)
+            out[rows, xs] = False
+    return out
+
+
+def has_tie(free, space, a, b, min_cover=0.85, max_thick=0.40):
+    """Is a tie arc drawn between noteheads a and b?
+
+    Looks just outside the pair, above and below, for a stroke that spans the
+    whole gap and stays thin. A beam also spans the gap but is about twice as
+    thick, which is what separates the two.
+    """
+    x0 = int(a["x"] + space * 0.5)
+    x1 = int(b["x"] - space * 0.5)
+    if x1 - x0 < space * 0.25:
+        return False
+    ymid = (a["y"] + b["y"]) / 2.0
+    for sign in (-1, 1):
+        lo = int(ymid + sign * space * 1.9)
+        hi = int(ymid + sign * space * 0.25)
+        lo, hi = min(lo, hi), max(lo, hi)
+        band = free[lo:hi, x0:x1]
+        if band.size == 0:
+            continue
+        cols = band.any(axis=0)
+        if cols.mean() < min_cover:
+            continue
+        if band.sum(axis=0)[cols].mean() <= space * max_thick:
+            return True
+    return False
+
+
 def find_barlines(noline, sysm, space, head_xs=()):
     """Thin vertical strokes spanning the whole staff height.
 

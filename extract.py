@@ -171,6 +171,21 @@ def run(path, tag):
             d.text((a["x0"] - x0 - 4, a["y0"] - y0b - 30),
                    {"sharp": "#", "natural": "n", "flat": "b"}.get(a["kind"], "?"),
                    fill=(255, 110, 0), font=font)
+        # mark detected ties, so collapsed notes can be checked against the page
+        free = heads.staff_free(ink, s)
+        ordered = sorted(H, key=lambda d: d["x"])
+        for a, bnext in zip(ordered, ordered[1:]):
+            sa = omr.step_at(s, a["x"], a["y"])
+            sb = omr.step_at(s, bnext["x"], bnext["y"])
+            if abs(sa - sb) > 0.3:
+                continue
+            if heads.has_tie(free, space, a, bnext):
+                ya = a["y"] - y0b - space * 1.5
+                d.line([(a["x"] - x0, ya), (bnext["x"] - x0, ya)],
+                       fill=(200, 0, 200), width=5)
+                d.text(((a["x"] + bnext["x"]) / 2 - x0 - 8, ya - 26), "tie",
+                       fill=(200, 0, 200), font=font)
+
         for h in H:
             st = omr.step_at(s, h["x"], h["y"])
             l, o = heads.step_to_note(st)

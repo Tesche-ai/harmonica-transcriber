@@ -130,32 +130,50 @@ def transcribe(path, tag, starts):
             problems.append(f"{tag} system {si} (bars {starts[si]}-"
                             f"{starts[si+1]-1}): found {len(buckets)} measures, "
                             f"expected {want}")
+        # Pitch every head in one pass over the system, then look for ties.
+        # Ties routinely cross a barline, so this cannot be done per measure.
+        def pitch_of(h):
+            st = omr.step_at(s, h["x"], h["y"])
+            letter, octv = heads.step_to_note(st)
+            # an accidental sits immediately left, on the same line or space
+            near = [a for a in acc
+                    if 0 < h["x"] - a["x"] < space * 2.4
+                    and abs(a["y"] - h["y"]) < space * 0.62]
+            # Apply an accidental only to the note it touches. It should
+            # carry to the rest of the bar, but one misread glyph would then
+            # poison every later note on that pitch, and this engraving
+            # restates accidentals anyway.
+            if near:
+                alt = {"sharp": 1, "flat": -1,
+                       "natural": 0}.get(near[-1]["kind"], 0)
+            else:
+                alt = KEYSIG.get(letter, 0)
+            return 12 * (octv + 1) + PC[letter] + alt, bool(near)
+
+        free = heads.staff_free(ink, s)
+        info = {}
+        prev_h = prev_midi = None
+        for h in sorted(H, key=lambda d: d["x"]):
+            midi, explicit = pitch_of(h)
+            # A tie is one sustained note, so the second head is not played
+            # again. Same pitch alone is not enough -- this music genuinely
+            # repeats notes -- so the arc itself has to be there.
+            tied = (prev_h is not None and midi == prev_midi
+                    and heads.has_tie(free, space, prev_h, h))
+            info[id(h)] = {"midi": midi, "explicit": explicit, "tied": tied}
+            prev_h, prev_midi = h, midi
+
         for j, b in enumerate(buckets):
             barno = starts[si] + j
-            state = {}                      # accidentals persist within a bar
             notes = []
             for h in b:
-                st = omr.step_at(s, h["x"], h["y"])
-                letter, octv = heads.step_to_note(st)
-                key = f"{letter}{octv}"
-                # an accidental sits immediately left, on the same line or space
-                near = [a for a in acc
-                        if 0 < h["x"] - a["x"] < space * 2.4
-                        and abs(a["y"] - h["y"]) < space * 0.62]
-                # Apply an accidental only to the note it touches. It should
-                # carry to the rest of the bar, but one misread glyph would then
-                # poison every later note on that pitch, and this engraving
-                # restates accidentals anyway.
-                if near:
-                    alt = {"sharp": 1, "flat": -1,
-                           "natural": 0}.get(near[-1]["kind"], 0)
-                else:
-                    alt = KEYSIG.get(letter, 0)
-                midi = 12 * (octv + 1) + PC[letter] + alt
-                notes.append({"midi": midi, "name": SHARP[midi % 12] + str(midi // 12 - 1),
+                d = info[id(h)]
+                notes.append({"midi": d["midi"],
+                              "name": SHARP[d["midi"] % 12] + str(d["midi"] // 12 - 1),
                               "grace": bool(h.get("grace")),
                               "hollow": bool(h.get("hollow")),
-                              "explicit": bool(near)})
+                              "explicit": d["explicit"],
+                              "tied": d["tied"]})
             bars_out.append({"bar": barno, "notes": notes,
                              "sys": f"{tag}{si}",
                              "ok": want is None or len(buckets) == want})
@@ -189,11 +207,15 @@ def by_system(all_bars):
         for bar in g:
             toks, names = [], []
             for n in bar["notes"]:
+                if n.get("tied"):
+                    continue            # held over from the previous note
                 t = tab_for(n["midi"], prev_hole)
                 if t:
                     prev_hole = t["hole"]
                 toks.append(t["txt"] if t else "X")
                 names.append(n["name"])
+            if not toks and bar["notes"]:
+                toks = names = ["~"]    # whole measure is a held note
             meas_tab.append(" ".join(toks) if toks else "-")
             meas_notes.append(" ".join(names) if names else "-")
         rows.append({"lo": g[0]["bar"], "hi": g[-1]["bar"],
@@ -229,6 +251,9 @@ def main():
 
     for p in problems:
         print("!! " + p)
+    ties = sum(1 for b in all_bars for n in b["notes"] if n.get("tied"))
+    heads_total = sum(len(b["notes"]) for b in all_bars)
+    print(f"\n{ties} ties collapsed out of {heads_total} noteheads")
     ok = sum(1 for r in rows if r["ok"])
     print(f"\n{ok}/{len(rows)} systems reconcile with the printed bar numbers")
     for r in rows:

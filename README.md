@@ -57,14 +57,26 @@ Four stages, in `omr.py` → `heads.py` → `extract.py` → `transcribe.py`.
    and it's ringed by ink on all sides — that annulus test is what separates
    the two.
 
-4. **Pitch and tab** (`transcribe.py`). Step position → letter + octave, then
+4. **Ties** (`heads.staff_free` / `heads.has_tie`). A tie means one sustained
+   note, so the second head must not be played again — and since tab carries
+   no duration, printing it twice reads as re-articulating. Same pitch is not
+   enough to decide: this music genuinely repeats notes, so the arc itself is
+   detected. It is looked for just outside the pair, above and below, as a
+   stroke spanning the whole gap while staying thin; a beam spans the same gap
+   but is about twice as thick. This runs on a copy of the image with only the
+   fitted staff lines masked out — the vertical-run filter used for noteheads
+   deletes ties, which are themselves thin near-horizontal strokes.
+   Ties cross barlines, so it runs over the whole system, not per measure.
+
+5. **Pitch and tab** (`transcribe.py`). Step position → letter + octave, then
    the key signature (F♯, C♯) unless an accidental glyph sits immediately left
    at the same staff position. Accidentals apply only to the note they touch,
    not to the rest of the bar: engraving convention says they should carry,
    but one misread glyph then poisons every later note on that pitch, and this
    chart restates accidentals anyway.
    Tab picks among enharmonic fingerings by preferring slide-out, then the
-   hole nearest the previous note.
+   hole nearest the previous note. A measure whose notes are all held over
+   prints as `~`.
 
 ## Accuracy, honestly
 
@@ -87,8 +99,7 @@ published per *system* rather than per bar.
   beam fragments and flag tips and invented notes, so it's disabled
   (`find_grace` in `transcribe.py`, currently unreachable). Real ornaments in
   bars 7 and 69 are missing from the output.
-- **Ties are not detected**, so a tied note appears twice.
-- **Rhythm is not read at all** — only pitch and order. Durations come from
+- **Rhythm is not read at all** — only pitch, order and ties. Durations come from
   looking at the sheet.
 - Two notes land outside the harp's range (`X` in the output, around bars 47
   and 114). Those are misreads.

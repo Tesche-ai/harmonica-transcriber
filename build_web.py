@@ -22,6 +22,8 @@ def render_rows(systems):
                 cells.append('<i class="bl">|</i>')
             elif tok == "-":
                 cells.append('<i class="rst">&middot;</i>')
+            elif tok == "~":
+                cells.append('<i class="held">~</i>')
             elif tok == "X":
                 cells.append('<i class="oor">X</i>')
             else:
