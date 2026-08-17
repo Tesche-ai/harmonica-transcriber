@@ -118,17 +118,19 @@ transcribe.py       pitches -> tab; writes out/
 build_web.py        out/systems.json -> web/harp.html (idempotent)
 scans/              page1.png, page2.png, original/ (the HEIC photos)
 out/                systems.json, bars.json, tab.txt, overlays/
-web/harp.html       the converter + the full transcription, self-contained
+web/harp.html       the full transcription + note chart, self-contained
 ```
 
-`web/harp.html` is also a standalone tool: type a melody as letters
-(`C4 F#4 Bb3`) or solfejo (`dó ré mi fá sol lá si`), get tab, play it back,
-see the mouthpiece light up. It handles 10/12/14/16 holes and non-C harps.
+`web/harp.html` is the published tab sheet: every system of the chart, plus a
+reference table of every note the harmonica can reach. It is static except for
+the note chart, which is generated at load.
 
-One trap worth remembering: everything the page passes to its own parser is
-kept **ASCII**. A literal combining-mark range in a regex once decoded wrong
-and threw at load, which killed the entire script — the page rendered but
-nothing worked. `build_web.py` asserts its payloads are ASCII.
+Earlier revisions also carried an interactive converter (type a melody, get
+tab, play it back). It was removed; `git log web/harp.html` has it if it is
+ever wanted back. One trap it left behind, worth remembering: a literal
+combining-mark range in a regex decoded wrong and threw at load, killing the
+entire script — the page rendered but nothing worked. Keep anything the page
+parses in **ASCII**.
 
 ## License and attribution
 
