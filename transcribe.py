@@ -6,7 +6,40 @@ import omr, heads, extract, paths
 
 SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
-KEYSIG = {"F": 1, "C": 1}                     # D major: F#, C#
+# Key signatures are written in a fixed order at fixed staff positions, so the
+# glyphs before the first note identify the key. Steps count diatonic degrees
+# from E4 (the bottom line of a treble staff).
+SHARP_ORDER, SHARP_STEPS = "FCGDAEB", [8, 5, 9, 6, 3, 7, 4]
+FLAT_ORDER, FLAT_STEPS = "BEADGCF", [4, 7, 3, 6, 2, 5, 1]
+KEYSIG_FALLBACK = {"F": 1, "C": 1}            # D major, if detection fails
+
+
+def detect_keysig(acc_all, first_note_x, sysm, space):
+    """Read the key signature from the accidentals before the first note.
+
+    Matching the glyphs against the expected sequence, in order, is what keeps
+    the clef and the time signature out: a stray glyph fails the position test
+    and stops the run rather than being counted.
+    """
+    glyphs = sorted((a for a in acc_all
+                     if a["x"] < first_note_x - space * 3
+                     and a["kind"] in ("sharp", "flat")),
+                    key=lambda a: a["x"])
+    if not glyphs:
+        return {}, None
+    kinds = [g["kind"] for g in glyphs]
+    kind = max(set(kinds), key=kinds.count)
+    order = SHARP_ORDER if kind == "sharp" else FLAT_ORDER
+    steps = SHARP_STEPS if kind == "sharp" else FLAT_STEPS
+    n = 0
+    for i, g in enumerate(glyphs):
+        if i >= len(steps) or g["kind"] != kind:
+            break
+        if abs(omr.step_at(sysm, g["x"], g["y"]) - steps[i]) > 0.6:
+            break
+        n = i + 1
+    alt = 1 if kind == "sharp" else -1
+    return {order[i]: alt for i in range(n)}, (kind, n)
 BLOW, DRAW = [0, 4, 7, 12], [2, 5, 9, 11]
 BASE, HOLES = 60, 12                          # 12-hole chromatic in C
 
@@ -58,13 +91,22 @@ def find_grace(ink, space, ymin, ymax, noline):
 P1_STARTS = [1, 7, 13, 19, 25, 32, 39, 46, 52, 58, 63]
 P2_STARTS = [63, 69, 76, 82, 89, 96, 102, 108, 115, 122, 128, 135]
 
+# Optional, per page key. Without a table the bars are simply numbered in
+# order; the trade is that nothing cross-checks the barline detector, so no
+# system can be marked "checked".
+STARTS = {"p1": P1_STARTS, "p2": P2_STARTS}
 
-def transcribe(path, tag, starts):
+
+def transcribe(path, tag, starts=None, first_bar=1):
     ink, gray = omr.load_binary(path)
     systems = extract.merge_split_systems(omr.build_systems(ink))
-    bars_out, problems = [], []
+    bars_out, problems, votes = [], [], []
+    barno = first_bar
     for si, s in enumerate(systems):
-        want = starts[si + 1] - starts[si] if si + 1 < len(starts) else None
+        if starts and si + 1 < len(starts):
+            want, sys_start = starts[si + 1] - starts[si], starts[si]
+        else:
+            want, sys_start = None, (starts[si] if starts else barno)
         space = extract.system_space(s)
         top = min(l[0] for l in s["lines"])
         bot = max(l[4] for l in s["lines"])
@@ -76,8 +118,9 @@ def transcribe(path, tag, starts):
         if not H:
             for k in range(want or 1):
                 # tag rest-only systems too, or they all group together as one
-                bars_out.append({"bar": starts[si] + k, "notes": [], "rest": True,
-                                 "sys": f"{tag}{si}", "ok": True})
+                bars_out.append({"bar": sys_start + k, "notes": [], "rest": True,
+                                 "sys": f"{tag}{si}", "ok": want is not None})
+            barno = sys_start + (want or 1)
             continue
         first = min(h["x"] for h in H)
         acc_all = extract.find_accidentals(hn, space, int(top - space * 2.5),
@@ -87,6 +130,9 @@ def transcribe(path, tag, starts):
         left_ok = (max(a["x1"] for a in keysig) + space * 1.2
                    if keysig else first - space * 8)
         acc = [a for a in acc_all if a["x"] > first - space * 3]
+        _, vote = detect_keysig(acc_all, first, s, space)
+        if vote:
+            votes.append(vote)
         for c in heads.find_hollow(ink, space, y0b, y1b):
             st = omr.step_at(s, c["x"], c["y"])
             if not (-3.5 <= st <= 11.5) or c["x"] < left_ok:
@@ -127,12 +173,12 @@ def transcribe(path, tag, starts):
         while len(buckets) > 1 and not buckets[0]:
             buckets.pop(0)
         if want is not None and len(buckets) != want:
-            problems.append(f"{tag} system {si} (bars {starts[si]}-"
-                            f"{starts[si+1]-1}): found {len(buckets)} measures, "
-                            f"expected {want}")
+            problems.append(f"{tag} system {si} (bars {sys_start}-"
+                            f"{sys_start + want - 1}): found {len(buckets)} "
+                            f"measures, expected {want}")
         # Pitch every head in one pass over the system, then look for ties.
         # Ties routinely cross a barline, so this cannot be done per measure.
-        def pitch_of(h):
+        def spelling_of(h):
             st = omr.step_at(s, h["x"], h["y"])
             letter, octv = heads.step_to_note(st)
             # an accidental sits immediately left, on the same line or space
@@ -143,41 +189,39 @@ def transcribe(path, tag, starts):
             # carry to the rest of the bar, but one misread glyph would then
             # poison every later note on that pitch, and this engraving
             # restates accidentals anyway.
-            if near:
-                alt = {"sharp": 1, "flat": -1,
-                       "natural": 0}.get(near[-1]["kind"], 0)
-            else:
-                alt = KEYSIG.get(letter, 0)
-            return 12 * (octv + 1) + PC[letter] + alt, bool(near)
+            alt = ({"sharp": 1, "flat": -1, "natural": 0}.get(near[-1]["kind"], 0)
+                   if near else None)
+            return letter, octv, alt
 
         free = heads.staff_free(ink, s)
         info = {}
         prev_h = prev_midi = None
         for h in sorted(H, key=lambda d: d["x"]):
-            midi, explicit = pitch_of(h)
-            # A tie is one sustained note, so the second head is not played
-            # again. Same pitch alone is not enough -- this music genuinely
-            # repeats notes -- so the arc itself has to be there.
-            tied = (prev_h is not None and midi == prev_midi
+            spell = spelling_of(h)
+            # Comparing the spelling rather than a pitch number lets this run
+            # before the key signature is known, and still tells F# from
+            # F-natural, because an explicit accidental is part of the spelling.
+            tied = (prev_h is not None and spell == prev_midi
                     and heads.has_tie(free, space, prev_h, h))
-            info[id(h)] = {"midi": midi, "explicit": explicit, "tied": tied}
-            prev_h, prev_midi = h, midi
+            info[id(h)] = {"spell": spell, "tied": tied}
+            prev_h, prev_midi = h, spell
 
         for j, b in enumerate(buckets):
-            barno = starts[si] + j
+            barno = sys_start + j
             notes = []
             for h in b:
                 d = info[id(h)]
-                notes.append({"midi": d["midi"],
-                              "name": SHARP[d["midi"] % 12] + str(d["midi"] // 12 - 1),
+                letter, octv, alt = d["spell"]
+                notes.append({"letter": letter, "octave": octv, "alt": alt,
                               "grace": bool(h.get("grace")),
                               "hollow": bool(h.get("hollow")),
-                              "explicit": d["explicit"],
+                              "explicit": alt is not None,
                               "tied": d["tied"]})
             bars_out.append({"bar": barno, "notes": notes,
                              "sys": f"{tag}{si}",
-                             "ok": want is None or len(buckets) == want})
-    return bars_out, problems
+                             "ok": want is not None and len(buckets) == want})
+        barno = sys_start + len(buckets)
+    return bars_out, problems, votes
 
 
 SECTIONS = [(1, 18, "Intro"), (19, 31, "A1 - solo"), (32, 62, "Instrumental"),
@@ -226,12 +270,52 @@ def by_system(all_bars):
     return rows
 
 
+def resolve_keysig(votes):
+    """Settle the key signature for the whole piece from per-system readings.
+
+    A key signature is constant across a piece, and the position test makes a
+    false reading unlikely while a missed glyph is common -- the sharps sit on
+    the staff lines and often fragment when those are removed. So take the
+    longest run seen anywhere rather than a majority, which would be dragged
+    down by the systems that under-read.
+    """
+    if not votes:
+        return dict(KEYSIG_FALLBACK), "fallback (D major)"
+    kinds = [k for k, _ in votes]
+    kind = max(set(kinds), key=kinds.count)
+    n = max((c for k, c in votes if k == kind), default=0)
+    if n == 0:
+        return {}, "none (C major)"
+    order = SHARP_ORDER if kind == "sharp" else FLAT_ORDER
+    alt = 1 if kind == "sharp" else -1
+    sig = {order[i]: alt for i in range(n)}
+    names = "".join(order[i] + ("#" if alt > 0 else "b") for i in range(n))
+    return sig, f"{n} {kind}{'s' if n != 1 else ''} ({names})"
+
+
+def apply_keysig(all_bars, keysig):
+    for bar in all_bars:
+        for n in bar["notes"]:
+            alt = n["alt"] if n["alt"] is not None else keysig.get(n["letter"], 0)
+            midi = 12 * (n["octave"] + 1) + PC[n["letter"]] + alt
+            n["midi"] = midi
+            n["name"] = SHARP[midi % 12] + str(midi // 12 - 1)
+
+
 def main():
     paths.ensure_dirs()
-    a, pa = transcribe(str(paths.PAGES["p1"]), "p1", P1_STARTS)
-    b, pb = transcribe(str(paths.PAGES["p2"]), "p2", P2_STARTS)
-    all_bars = a + b
-    problems = pa + pb
+    keys = sorted((k for k in paths.PAGES if k.startswith("p") and k[1:].isdigit()),
+                  key=lambda k: int(k[1:]))
+    all_bars, problems, votes, nextbar = [], [], [], 1
+    for k in keys:
+        bars, probs, v = transcribe(str(paths.PAGES[k]), k, STARTS.get(k), nextbar)
+        all_bars += bars
+        problems += probs
+        votes += v
+        nextbar = (bars[-1]["bar"] + 1) if bars else nextbar
+    keysig, ksdesc = resolve_keysig(votes)
+    apply_keysig(all_bars, keysig)
+    print(f"key signature read from the page: {ksdesc}")
 
     rows = by_system(all_bars)
     json.dump(rows, open(paths.OUT / "systems.json", "w"), indent=1)

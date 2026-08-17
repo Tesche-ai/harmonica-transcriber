@@ -113,8 +113,67 @@ published per *system* rather than per bar.
    the staff and aren't adjacent to a notehead.
 2. Beam/flag counting would give durations and make real rhythm possible.
 3. Tie detection (arc between two same-pitch heads) would fix the doubles.
-4. Generalise past this one chart: key signature is hardcoded to D major
-   (`KEYSIG` in `transcribe.py`), and bar counts per system are hardcoded.
+4. Beam/flag counting for durations, and repeat/D.S./Coda navigation.
+
+## Another piece from the same book
+
+The engraving is fixed, and every threshold is expressed in units of the
+measured staff space, so nothing is tied to a particular resolution or to how
+close the camera was. Adding a piece is: drop the deskewed pages in `scans/`
+and run `transcribe.py`. Pages are discovered by filename order.
+
+Read from the page automatically:
+
+- **Staff geometry and scale** — per system, so pages at different sizes mix
+  freely.
+- **Key signature** — from the glyphs between the clef and the first note,
+  matched against the fixed order and staff positions sharps and flats are
+  written in. It is resolved per *piece*, not per system: a false reading is
+  unlikely (a glyph must land within 0.6 of a step of the exact expected
+  position, in sequence) while a missed one is common, because the signature
+  sharps sit on the staff lines and fragment when those are removed. So the
+  longest run seen anywhere wins rather than a majority.
+
+Still piece-specific, all optional:
+
+- `STARTS` in `transcribe.py` — the printed rehearsal numbers, used only to
+  cross-check the barline detector. Without them everything still runs; bars
+  are numbered in order and no system can be marked `checked`.
+- `SECTIONS` — cosmetic grouping in the published table.
+- `BASE`/`HOLES` — the target harmonica, not the music.
+
+Not handled yet: mid-piece key changes, clefs other than treble, and repeat /
+D.S. / Coda navigation (the tab is in printed order, not playing order).
+
+## Photographing the pages
+
+Every threshold scales with the **staff space** — the gap between two staff
+lines — so that number is the one that matters. The current photos measure
+**20–24px**, from 12MP shots of a full page.
+
+What would actually help, in order:
+
+1. **Flatten the page.** The staves in these photos bend up to **0.7 of a
+   staff space** across the width. One diatonic step is *half* a staff space,
+   so that is 1.4 steps of drift that the fit has to model rather than read.
+   Weigh the spiral binding down, shoot straight down, keep the lens parallel
+   to the paper. A phone "scan document" mode does perspective correction and
+   is likely better than a raw photo.
+2. **More pixels per staff.** At 20px per staff space, a sharp is about 20px
+   wide, and sharp / natural / flat are told apart by where their strokes
+   start and stop — a handful of pixels. That is the resolution-limited part,
+   and it is exactly what misreads today. Shooting at the phone's maximum
+   resolution (48MP rather than 12MP) roughly doubles the staff space and
+   costs nothing.
+3. **Flat, diffuse light, no flash.** Thresholding is local so a gradient is
+   fine, but a specular highlight erases the print underneath it.
+4. **Whole page, one page per shot**, including the left margin where the bar
+   numbers are, and the key signature at the start of every system.
+5. **Consistent upright orientation**, so no rotation has to be configured in
+   `prepare.py`.
+
+Not worth worrying about: even lighting across the page, mild tilt, moderate
+JPEG noise, and the exact distance — all of that is already absorbed.
 
 ## Layout
 

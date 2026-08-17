@@ -7,11 +7,20 @@ OUT = ROOT / "out"
 OVERLAYS = OUT / "overlays"
 WEB = ROOT / "web"
 
-# Deskewed page scans. Add pages here as the library grows.
-PAGES = {
-    "p1": SCANS / "page1.png",
-    "p2": SCANS / "page2.png",
-}
+def _discover():
+    """Every deskewed page in scans/, in filename order.
+
+    Reachable as p1, p2, ... and by filename stem, so adding a piece is a
+    matter of dropping images in rather than editing code.
+    """
+    pages = {}
+    for i, p in enumerate(sorted(SCANS.glob("*.png")), start=1):
+        pages.setdefault(f"p{i}", p)
+        pages.setdefault(p.stem, p)
+    return pages
+
+
+PAGES = _discover()
 
 
 def page(key):
