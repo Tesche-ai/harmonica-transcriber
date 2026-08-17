@@ -1,0 +1,176 @@
+"""Notehead + barline extraction, building on omr.build_systems."""
+import numpy as np
+from PIL import Image, ImageDraw
+from scipy import ndimage as ndi
+import omr
+
+
+def vertical_run_filter(ink, max_run):
+    """Drop ink pixels whose vertical ink-run is <= max_run (kills staff lines)."""
+    h, w = ink.shape
+    out = np.zeros_like(ink)
+    a = ink.astype(np.int8)
+    # run length per column via cumulative trick
+    for x in range(w):
+        col = a[:, x]
+        if not col.any():
+            continue
+        idx = np.flatnonzero(np.diff(np.concatenate(([0], col, [0]))))
+        starts, ends = idx[0::2], idx[1::2]
+        keep = (ends - starts) > max_run
+        for s, e in zip(starts[keep], ends[keep]):
+            out[s:e, x] = True
+    return out
+
+
+def disk(r):
+    y, x = np.ogrid[-r:r + 1, -r:r + 1]
+    return (x * x + y * y) <= r * r
+
+
+def find_heads(ink, space, ymin, ymax):
+    band = np.zeros_like(ink)
+    band[ymin:ymax] = ink[ymin:ymax]
+    # 1. remove staff lines (thin horizontal structures)
+    noline = vertical_run_filter(band, max_run=int(space * 0.35))
+    # 2. fill any enclosed counters. No morphological closing here: it welds
+    #    adjacent 16th-note heads into one blob and loses both.
+    filled = ndi.binary_fill_holes(noline)
+    # 3. keep only blobs that can hold a notehead-sized disk
+    r = max(3, int(round(space * 0.34)))
+    opened = ndi.binary_opening(filled, structure=disk(r))
+    lab, n = ndi.label(opened)
+    heads = []
+    for sl, i in zip(ndi.find_objects(lab), range(1, n + 1)):
+        ys, xs = sl
+        hgt, wid = ys.stop - ys.start, xs.stop - xs.start
+        area = (lab[sl] == i).sum()
+        # a printed notehead is a tilted ellipse: reliably wider than tall,
+        # ~1.3 space wide x ~1.05 space high. Sharps are taller than wide,
+        # chord letters and augmentation dots are too small.
+        if not (space * 0.90 <= wid <= space * 1.62):
+            continue
+        if not (space * 0.82 <= hgt <= space * 1.28):
+            continue
+        if wid < hgt * 0.95:
+            continue
+        if not (space * space * 0.62 <= area <= space * space * 1.35):
+            continue
+        cy, cx = ndi.center_of_mass(lab == i)
+        heads.append({"x": float(cx), "y": float(cy), "w": wid, "h": hgt, "area": int(area)})
+    heads.sort(key=lambda d: d["x"])
+    return heads, noline
+
+
+def find_hollow(ink, space, ymin, ymax):
+    """Half/whole notes, found by their enclosed white counter.
+
+    These survive neither the opening (too thin a ring) nor a fill after the
+    staff lines are stripped (the strip cuts the ring open), so look for the
+    counter in the untouched image, where the ring is still closed.
+    A notehead counter is markedly flatter than the cells the staff lines and
+    stems enclose, which is what separates the two.
+    """
+    band = np.zeros_like(ink)
+    band[ymin:ymax] = ink[ymin:ymax]
+    holes = ndi.binary_fill_holes(band) & ~band
+    lab, n = ndi.label(holes)
+    out = []
+    for sl, i in zip(ndi.find_objects(lab), range(1, n + 1)):
+        ys, xs = sl
+        h, w = ys.stop - ys.start, xs.stop - xs.start
+        if not (space * 0.25 <= h <= space * 0.62):
+            continue
+        if not (space * 0.35 <= w <= space * 0.95):
+            continue
+        if w <= h * 1.05:
+            continue
+        area = (lab[sl] == i).sum()
+        if area < 0.5 * w * h:
+            continue
+        # A notehead counter is ringed by ink on every side. The cells that
+        # stems and beams enclose are bounded by thin strokes left and right,
+        # so their surrounding annulus is mostly white -- that is the test.
+        pad = max(2, int(round(space * 0.22)))
+        y0, y1 = max(0, ys.start - pad), min(band.shape[0], ys.stop + pad)
+        x0, x1 = max(0, xs.start - pad), min(band.shape[1], xs.stop + pad)
+        win = band[y0:y1, x0:x1]
+        holewin = (lab[y0:y1, x0:x1] == i)
+        annulus = win.sum()
+        denom = win.size - holewin.sum()
+        if denom <= 0 or annulus / denom < 0.78:
+            continue
+        cy, cx = ndi.center_of_mass(lab == i)
+        out.append({"x": float(cx), "y": float(cy), "w": w, "h": h,
+                    "area": int(area), "hollow": True})
+    out.sort(key=lambda d: d["x"])
+    return out
+
+
+def find_barlines(noline, sysm, space, head_xs=()):
+    """Thin vertical strokes spanning the whole staff height.
+
+    A stem can also span the staff, so drop candidates sitting next to a
+    notehead -- a barline stands alone.
+    """
+    top = min(l[0] for l in sysm["lines"])
+    bot = max(l[4] for l in sysm["lines"])
+    band = noline[top:bot + 1]
+    colsum = band.sum(axis=0)
+    # the staff tilts, so the true height at column x is less than bot-top;
+    # measure it per column instead of using the global extent.
+    w = noline.shape[1]
+    xs = np.arange(w)
+    hgt = np.array([omr.line_y(sysm, float(x), 4) - omr.line_y(sysm, float(x), 0)
+                    for x in xs])
+    # A barline runs the full staff height and stops there. A stem also spans
+    # the staff but continues out to its beam, so measure the overshoot too.
+    up = np.zeros(w); dn = np.zeros(w)
+    for x in range(w):
+        col = np.flatnonzero(noline[:, x])
+        if len(col) == 0:
+            continue
+        t, b = omr.line_y(sysm, float(x), 0), omr.line_y(sysm, float(x), 4)
+        up[x] = max(0.0, t - col.min())
+        dn[x] = max(0.0, col.max() - b)
+    hot = (colsum >= hgt * 0.85) & (up < space * 0.75) & (dn < space * 0.75)
+    bars, x = [], 0
+    while x < len(hot):
+        if hot[x]:
+            x2 = x
+            while x2 + 1 < len(hot) and hot[x2 + 1]:
+                x2 += 1
+            if x2 - x < space * 0.8:
+                bars.append((x + x2) / 2.0)
+            x = x2 + 1
+        else:
+            x += 1
+    if len(head_xs):
+        hx = np.asarray(head_xs, dtype=float)
+        bars = [b for b in bars if np.abs(hx - b).min() > space * 0.75]
+    # collapse double barlines / repeat marks into one
+    merged = []
+    for b in bars:
+        if merged and b - merged[-1] < space * 1.2:
+            merged[-1] = (merged[-1] + b) / 2.0
+        else:
+            merged.append(b)
+    return merged
+
+
+LETTERS = "EFGABCD"        # step 0 = E4 (bottom line of treble staff)
+BASE_MIDI = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def step_to_note(step):
+    """step 0 = E4. Returns (letter, octave)."""
+    k = int(round(step))
+    letter = LETTERS[k % 7]
+    octave = 4 + (k + 2) // 7          # E4 is step 0; C5 is step 5
+    return letter, octave
+
+
+def analyse(path, sysm_index=None, page=""):
+    ink, gray = omr.load_binary(path)
+    systems = omr.build_systems(ink)
+    return ink, systems
