@@ -21,6 +21,18 @@ handled, and the page may be sideways -- the rotation is worked out by trying
 each quarter turn and keeping whichever finds the most staves. About 5 seconds
 for a full page.
 
+**Every tab line is editable in place.** Click a line, retype it, Enter to
+confirm or Esc to undo. An unknown token is flagged in red rather than
+silently dropped, edited lines are badged and can be reverted individually,
+and the PDF prints what is on screen. This is not a nicety: a photo read by
+machine always needs a human pass, and the correction step is where the
+output becomes trustworthy.
+
+In the studio, **Save corrections** writes `out/tab-corrected.txt` and
+`out/corrections.json`. On the published chart there is no server, so edits
+are kept in the browser's local storage instead -- a rebuild regenerates the
+table and would otherwise wipe them.
+
 **Drop in every page of a piece at once.** They are sorted by filename, read
 one at a time with progress shown, then joined. Joining is not concatenation:
 the key signature is pooled across all pages, because pooling is what makes it

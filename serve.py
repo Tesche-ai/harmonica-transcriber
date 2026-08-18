@@ -160,6 +160,24 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/reset":
             BATCH.clear()
             return self._json(200, {"ok": True})
+        if self.path == "/api/save":
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                data = json.loads(self.rfile.read(n) or b"{}")
+                rows = data.get("systems", [])
+                lines = ["Corrected tablature", "5=blow 5  |  -5=draw 5  |  *=slide in", ""]
+                for r in rows:
+                    flag = " *" if r.get("edited") else "  "
+                    lines.append(f"bars {r.get('bars',''):>9}{flag}  {r.get('tab','')}")
+                (paths.OUT / "tab-corrected.txt").write_text(
+                    "\n".join(lines) + "\n", encoding="utf-8")
+                json.dump(rows, open(paths.OUT / "corrections.json", "w"), indent=1)
+                edited = sum(1 for r in rows if r.get("edited"))
+                sys.stderr.write(f"  saved {len(rows)} lines, {edited} edited\n")
+                return self._json(200, {"ok": True, "lines": len(rows), "edited": edited})
+            except Exception as exc:
+                traceback.print_exc()
+                return self._json(400, {"error": str(exc)})
         if self.path == "/api/finish":
             try:
                 return self._json(200, finish_batch())

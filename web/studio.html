@@ -99,6 +99,25 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
 .legend b{color:var(--ink)}
 #result[hidden]{display:none}
 
+
+/* ---------- manual correction ---------- */
+.tabcell[contenteditable]{cursor:text;border-radius:3px;outline:0}
+.tabcell[contenteditable]:hover{background:var(--surface-2)}
+.tabcell[contenteditable]:focus{background:var(--ground);box-shadow:inset 0 0 0 2px var(--draw)}
+.tabcell i.bad{color:var(--alert);text-decoration:underline wavy var(--alert);text-underline-offset:3px}
+tr.edited th.brs{border-left:3px solid var(--blow)}
+.bdg.edited{color:var(--blow)}
+.revert{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  background:none;border:1px solid currentColor;color:var(--ink-3);border-radius:99px;
+  padding:1px 6px;margin-top:3px;cursor:pointer;display:block}
+.revert:hover{color:var(--ink)}
+.editbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--ink-3)}
+@media print{
+  .tabcell[contenteditable]{box-shadow:none;background:none}
+  .revert{display:none !important}
+  tr.edited th.brs{border-left:0}
+}
+
 /* ---------- print / PDF ---------- */
 @media print{
   @page{size:A4 portrait;margin:12mm}
@@ -139,7 +158,10 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
   <section class="panel" id="result" hidden>
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
       <h2 id="title">Tablature</h2>
-      <button class="btn noprint" id="pdf">Save as PDF</button>
+      <div class="btn-row noprint">
+        <button class="btn" id="savefix">Save corrections</button>
+        <button class="btn primary" id="pdf">Save as PDF</button>
+      </div>
     </div>
     <div class="facts" id="facts"></div>
     <div class="scroll"><table>
@@ -152,6 +174,8 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
       <span><b>~</b> still holding the tied note</span>
       <span><b class="oor">X</b> outside the harp's range</span>
     </div>
+    <p class="editbar noprint">Click any line to correct it. Enter to confirm, Esc to undo.
+      Unknown tokens are flagged in red rather than dropped.</p>
     <p class="hint" id="caveat"></p>
   </section>
 </div>
@@ -269,8 +293,114 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
       "rehearsal numbers there is nothing to cross-check the barlines against, so " +
       "every line reads as draft — count them against the sheet.";
     result.hidden = false;
+    enableEditing(document, null);
   }
 
+
+  /* ---------- manual correction ----------
+     Every tab line is editable in place. The reading is a machine's best
+     guess, so the last step before printing is a person fixing it; the PDF
+     prints whatever is on screen, corrections included. */
+  var TOKEN = /^(-?(?:[1-9]|1[0-6])\*?)$/;
+
+  function esc(t){
+    return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function tokenHTML(tok){
+    if (tok === "|") return '<i class="bl">|</i>';
+    if (tok === "-" || tok === "·") return '<i class="rst">·</i>';
+    if (tok === "~") return '<i class="held">~</i>';
+    if (tok === "X" || tok === "x") return '<i class="oor">X</i>';
+    if (TOKEN.test(tok)) return '<i class="' + (tok.charAt(0) === "-" ? "dr" : "bw") +
+                                '">' + tok + "</i>";
+    return '<i class="bad">' + esc(tok) + "</i>";   // flagged, never silently dropped
+  }
+  function paint(cell, text){
+    var toks = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    cell.innerHTML = toks.map(tokenHTML).join(" ");
+  }
+  function plain(cell){
+    return cell.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function markEdited(cell){
+    var row = cell.closest("tr"),
+        changed = plain(cell) !== cell.dataset.orig;
+    row.classList.toggle("edited", changed);
+    var head = row.querySelector("th.brs");
+    if (!head) return;
+    var badge = head.querySelector(".bdg"),
+        btn = head.querySelector(".revert");
+    if (changed){
+      if (badge) { badge.className = "bdg edited"; badge.textContent = "edited"; }
+      if (!btn){
+        btn = document.createElement("button");
+        btn.className = "revert";
+        btn.type = "button";
+        btn.textContent = "revert";
+        btn.addEventListener("click", function(){
+          paint(cell, cell.dataset.orig);
+          markEdited(cell);
+          save();
+        });
+        head.appendChild(btn);
+      }
+    } else {
+      if (badge && cell.dataset.badge){
+        badge.className = "bdg " + (cell.dataset.badge === "checked" ? "ok" : "draft");
+        badge.textContent = cell.dataset.badge;
+      }
+      if (btn) btn.remove();
+    }
+  }
+
+  function enableEditing(root, onSave){
+    root.querySelectorAll("td.tabcell").forEach(function(cell){
+      if (cell.dataset.orig !== undefined) return;
+      cell.dataset.orig = plain(cell);
+      var badge = cell.closest("tr").querySelector(".bdg");
+      if (badge) cell.dataset.badge = badge.textContent.trim();
+      cell.setAttribute("contenteditable", "plaintext-only");
+      if (cell.contentEditable !== "plaintext-only") cell.setAttribute("contenteditable", "true");
+      cell.setAttribute("spellcheck", "false");
+      cell.addEventListener("focus", function(){ cell.textContent = plain(cell); });
+      cell.addEventListener("blur", function(){
+        paint(cell, plain(cell));
+        markEdited(cell);
+        if (onSave) onSave();
+      });
+      cell.addEventListener("keydown", function(e){
+        if (e.key === "Enter"){ e.preventDefault(); cell.blur(); }
+        if (e.key === "Escape"){ paint(cell, cell.dataset.orig); markEdited(cell); cell.blur(); }
+      });
+    });
+  }
+
+  function collect(root){
+    return [...root.querySelectorAll("tbody tr")].filter(function(tr){
+      return tr.querySelector("td.tabcell");
+    }).map(function(tr){
+      var head = tr.querySelector("th.brs");
+      return {bars: head ? head.childNodes[0].textContent.trim() : "",
+              tab: plain(tr.querySelector("td.tabcell")),
+              edited: tr.classList.contains("edited")};
+    });
+  }
+
+  function save(){}   // studio saves on demand, not on every keystroke
+
   document.getElementById("pdf").addEventListener("click", function(){ window.print(); });
+  document.getElementById("savefix").addEventListener("click", function(){
+    var btn = this;
+    fetch("/api/save", {method:"POST", headers:{"Content-Type":"application/json"},
+                        body: JSON.stringify({systems: collect(document)})})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j.error) throw new Error(j.error);
+        btn.textContent = "Saved to out/";
+        setTimeout(function(){ btn.textContent = "Save corrections"; }, 1800);
+      })
+      .catch(function(e){ say(String(e.message || e), false, true); });
+  });
 })();
 </script>

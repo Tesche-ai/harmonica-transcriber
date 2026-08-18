@@ -268,6 +268,25 @@ th.brs{white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:600
 .btn.tiny{padding:4px 9px;font-size:10px}
 
 
+
+/* ---------- manual correction ---------- */
+.tabcell[contenteditable]{cursor:text;border-radius:3px;outline:0}
+.tabcell[contenteditable]:hover{background:var(--surface-2)}
+.tabcell[contenteditable]:focus{background:var(--ground);box-shadow:inset 0 0 0 2px var(--draw)}
+.tabcell i.bad{color:var(--alert);text-decoration:underline wavy var(--alert);text-underline-offset:3px}
+tr.edited th.brs{border-left:3px solid var(--blow)}
+.bdg.edited{color:var(--blow)}
+.revert{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  background:none;border:1px solid currentColor;color:var(--ink-3);border-radius:99px;
+  padding:1px 6px;margin-top:3px;cursor:pointer;display:block}
+.revert:hover{color:var(--ink)}
+.editbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--ink-3)}
+@media print{
+  .tabcell[contenteditable]{box-shadow:none;background:none}
+  .revert{display:none !important}
+  tr.edited th.brs{border-left:0}
+}
+
 /* ---------- print / PDF ---------- */
 .toolbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 @media print{
@@ -307,7 +326,8 @@ th.brs{white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:600
       Read off your two photos: 134 bars, key of D, for a 12-hole C chromatic.
       <b>Checked</b> lines reconcile with the printed bar numbers on the page.
       <b>Draft</b> lines have the right notes in the right order, but a barline
-      or two may sit wrong — count against the sheet.
+      or two may sit wrong — count against the sheet. <b>Click any line to
+      correct it</b>; edits are kept in this browser and are what gets printed.
     </p>
     <div class="chart-scroll">
       <table class="score">
@@ -423,6 +443,121 @@ th.brs{white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:600
   // Print-to-PDF rather than generating one: the browser's own engine handles
   // pagination and font embedding, and it needs no library, which keeps the
   // page self-contained.
+
+  /* ---------- manual correction ----------
+     Every tab line is editable in place. The reading is a machine's best
+     guess, so the last step before printing is a person fixing it; the PDF
+     prints whatever is on screen, corrections included. */
+  var TOKEN = /^(-?(?:[1-9]|1[0-6])\*?)$/;
+
+  function esc(t){
+    return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function tokenHTML(tok){
+    if (tok === "|") return '<i class="bl">|</i>';
+    if (tok === "-" || tok === "·") return '<i class="rst">·</i>';
+    if (tok === "~") return '<i class="held">~</i>';
+    if (tok === "X" || tok === "x") return '<i class="oor">X</i>';
+    if (TOKEN.test(tok)) return '<i class="' + (tok.charAt(0) === "-" ? "dr" : "bw") +
+                                '">' + tok + "</i>";
+    return '<i class="bad">' + esc(tok) + "</i>";   // flagged, never silently dropped
+  }
+  function paint(cell, text){
+    var toks = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    cell.innerHTML = toks.map(tokenHTML).join(" ");
+  }
+  function plain(cell){
+    return cell.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function markEdited(cell){
+    var row = cell.closest("tr"),
+        changed = plain(cell) !== cell.dataset.orig;
+    row.classList.toggle("edited", changed);
+    var head = row.querySelector("th.brs");
+    if (!head) return;
+    var badge = head.querySelector(".bdg"),
+        btn = head.querySelector(".revert");
+    if (changed){
+      if (badge) { badge.className = "bdg edited"; badge.textContent = "edited"; }
+      if (!btn){
+        btn = document.createElement("button");
+        btn.className = "revert";
+        btn.type = "button";
+        btn.textContent = "revert";
+        btn.addEventListener("click", function(){
+          paint(cell, cell.dataset.orig);
+          markEdited(cell);
+          save();
+        });
+        head.appendChild(btn);
+      }
+    } else {
+      if (badge && cell.dataset.badge){
+        badge.className = "bdg " + (cell.dataset.badge === "checked" ? "ok" : "draft");
+        badge.textContent = cell.dataset.badge;
+      }
+      if (btn) btn.remove();
+    }
+  }
+
+  function enableEditing(root, onSave){
+    root.querySelectorAll("td.tabcell").forEach(function(cell){
+      if (cell.dataset.orig !== undefined) return;
+      cell.dataset.orig = plain(cell);
+      var badge = cell.closest("tr").querySelector(".bdg");
+      if (badge) cell.dataset.badge = badge.textContent.trim();
+      cell.setAttribute("contenteditable", "plaintext-only");
+      if (cell.contentEditable !== "plaintext-only") cell.setAttribute("contenteditable", "true");
+      cell.setAttribute("spellcheck", "false");
+      cell.addEventListener("focus", function(){ cell.textContent = plain(cell); });
+      cell.addEventListener("blur", function(){
+        paint(cell, plain(cell));
+        markEdited(cell);
+        if (onSave) onSave();
+      });
+      cell.addEventListener("keydown", function(e){
+        if (e.key === "Enter"){ e.preventDefault(); cell.blur(); }
+        if (e.key === "Escape"){ paint(cell, cell.dataset.orig); markEdited(cell); cell.blur(); }
+      });
+    });
+  }
+
+  function collect(root){
+    return [...root.querySelectorAll("tbody tr")].filter(function(tr){
+      return tr.querySelector("td.tabcell");
+    }).map(function(tr){
+      var head = tr.querySelector("th.brs");
+      return {bars: head ? head.childNodes[0].textContent.trim() : "",
+              tab: plain(tr.querySelector("td.tabcell")),
+              edited: tr.classList.contains("edited")};
+    });
+  }
+
+  // This page is generated, so corrections live in the browser rather than in
+  // the file; a rebuild would otherwise wipe them.
+  var KEY = "harp-corrections-v1";
+  function save(){
+    var out = {};
+    collect(document).forEach(function(r){ if (r.edited) out[r.bars] = r.tab; });
+    try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) {}
+  }
+  function restore(){
+    var saved;
+    try { saved = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return; }
+    document.querySelectorAll("tbody tr").forEach(function(tr){
+      var head = tr.querySelector("th.brs"), cell = tr.querySelector("td.tabcell");
+      if (!head || !cell) return;
+      var bars = head.childNodes[0].textContent.trim();
+      if (saved[bars] !== undefined && saved[bars] !== cell.dataset.orig){
+        paint(cell, saved[bars]);
+        markEdited(cell);
+      }
+    });
+  }
+  enableEditing(document, save);
+  restore();
+
   var pdf = document.getElementById("pdf");
   if (pdf) pdf.addEventListener("click", function(){ window.print(); });
 })();
