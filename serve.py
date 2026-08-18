@@ -97,15 +97,35 @@ def orient(png: Path):
     return full, best_n, best_rot
 
 
-def transcribe_one(png: Path, tag="upload"):
-    bars, problems, votes = T.transcribe(str(png), tag, None, 1)
-    keysig, ksdesc = T.resolve_keysig(votes)
-    T.apply_keysig(bars, keysig)
-    rows = T.by_system(bars)
-    ties = sum(1 for b in bars for n in b["notes"] if n.get("tied"))
-    notes = sum(len(b["notes"]) for b in bars)
+# Pages of one piece are held until the batch is closed. The key signature is
+# a property of the piece, not of a page -- pooling the readings from every
+# page is what makes it reliable -- and bar numbers have to run straight
+# through, so a page cannot be finished on its own.
+BATCH = []
+
+
+def add_page(png: Path, name: str, rotation: int):
+    first = (BATCH[-1]["last_bar"] + 1) if BATCH else 1
+    bars, problems, votes = T.transcribe(str(png), f"u{len(BATCH)}", None, first)
+    BATCH.append({"name": name, "bars": bars, "votes": votes,
+                  "problems": problems, "rotation": rotation,
+                  "last_bar": bars[-1]["bar"] if bars else first - 1})
+    return {"page": len(BATCH), "name": name, "rotation": rotation,
+            "systems": len({b["sys"] for b in bars}), "bars": len(bars)}
+
+
+def finish_batch():
+    if not BATCH:
+        raise ValueError("no pages were added")
+    all_bars = [b for p in BATCH for b in p["bars"]]
+    keysig, ksdesc = T.resolve_keysig([v for p in BATCH for v in p["votes"]])
+    T.apply_keysig(all_bars, keysig)
+    rows = T.by_system(all_bars)
+    ties = sum(1 for b in all_bars for n in b["notes"] if n.get("tied"))
+    notes = sum(len(b["notes"]) for b in all_bars)
     return {"systems": rows, "key": ksdesc, "ties": ties, "notes": notes,
-            "bars": len(bars), "problems": problems}
+            "bars": len(all_bars), "pages": [p["name"] for p in BATCH],
+            "problems": [x for p in BATCH for x in p["problems"]]}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -128,8 +148,25 @@ class Handler(SimpleHTTPRequestHandler):
             self.path = "/studio.html"
         return super().do_GET()
 
+    def _json(self, code, obj):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self):
-        if self.path != "/api/transcribe":
+        if self.path == "/api/reset":
+            BATCH.clear()
+            return self._json(200, {"ok": True})
+        if self.path == "/api/finish":
+            try:
+                return self._json(200, finish_batch())
+            except Exception as exc:
+                traceback.print_exc()
+                return self._json(400, {"error": str(exc)})
+        if self.path != "/api/page":
             self.send_error(404)
             return
         try:
@@ -144,23 +181,11 @@ class Handler(SimpleHTTPRequestHandler):
                 if count < 1:
                     raise ValueError("no staves found in this image")
                 sys.stderr.write(f"  {name}: {count} systems, rotated {rot} deg\n")
-                result = transcribe_one(best)
-                result["rotation"] = rot
-                result["file"] = name
-            body = json.dumps(result).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+                result = add_page(best, name, rot)
+            self._json(200, result)
         except Exception as exc:
             traceback.print_exc()
-            body = json.dumps({"error": str(exc)}).encode()
-            self.send_response(400)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self._json(400, {"error": str(exc)})
 
 
 if __name__ == "__main__":

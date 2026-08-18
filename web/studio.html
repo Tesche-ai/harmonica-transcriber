@@ -58,6 +58,14 @@ input[type=file]{display:none}
 /* ---------- status ---------- */
 #status{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);min-height:1.4em}
 #status.err{color:var(--alert)}
+#queue{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+#queue:empty{display:none}
+#queue li{font-family:var(--mono);font-size:12px;color:var(--ink-3);display:flex;gap:9px;align-items:baseline}
+#queue li .mark{width:1.1em;display:inline-block;text-align:center}
+#queue li.done{color:var(--ink-2)}
+#queue li.done .mark{color:var(--ok)}
+#queue li.fail{color:var(--alert)}
+#queue li.now{color:var(--ink)}
 .spin{display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;
   border:2px solid var(--line-strong);border-top-color:var(--draw);border-radius:50%;
   animation:sp .8s linear infinite}
@@ -119,10 +127,11 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
   <section class="panel noprint">
     <div id="drop" tabindex="0" role="button" aria-label="Choose or drop a photo">
       <div class="big">Drop a page photo here</div>
-      <div class="sub">or click to choose &mdash; HEIC, JPEG or PNG, one page per image</div>
+      <div class="sub">or click to choose &mdash; HEIC, JPEG or PNG. Pick several at once and they are joined into one piece.</div>
     </div>
-    <input type="file" id="file" accept="image/*,.heic,.heif">
+    <input type="file" id="file" accept="image/*,.heic,.heif" multiple>
     <div id="status"></div>
+    <ol id="queue"></ol>
     <p class="hint">Shoot the page flat and fill the frame. Sideways is fine &mdash; the rotation
       is worked out automatically.</p>
   </section>
@@ -171,20 +180,63 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
     drop.addEventListener(t, function(e){ e.preventDefault(); drop.classList.remove("over"); });
   });
   drop.addEventListener("drop", function(e){
-    if (e.dataTransfer.files.length) send(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length) run(e.dataTransfer.files);
   });
-  file.addEventListener("change", function(){ if (file.files.length) send(file.files[0]); });
+  file.addEventListener("change", function(){ if (file.files.length) run(file.files); });
 
-  function send(f){
-    say("Reading " + f.name + " — staff lines, noteheads, ties…", true);
-    // raw bytes with the name in a header: no multipart to parse server-side
-    fetch("/api/transcribe", {method:"POST", headers:{"X-Filename": f.name}, body:f})
-      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
-      .then(function(res){
-        if (!res.ok) throw new Error(res.j.error || "could not read that image");
-        render(f.name, res.j);
-        say("Read " + f.name + ".", false);
-      })
+  var queue = document.getElementById("queue");
+
+  function post(url, body, name){
+    var opts = {method:"POST"};
+    if (body) { opts.body = body; opts.headers = {"X-Filename": name}; }
+    return fetch(url, opts).then(function(r){
+      return r.json().then(function(j){
+        if (!r.ok) throw new Error(j.error || "could not read that image");
+        return j;
+      });
+    });
+  }
+
+  // Pages go up one at a time and are only combined at the end: the key
+  // signature is pooled across all of them and the bar numbers have to run
+  // straight through, so no page can be finished on its own.
+  function run(list){
+    var files = Array.prototype.slice.call(list).sort(function(a, b){
+      return a.name.localeCompare(b.name, undefined, {numeric:true});
+    });
+    result.hidden = true;
+    queue.innerHTML = files.map(function(f, i){
+      return '<li id="q' + i + '"><span class="mark">·</span>' + f.name + "</li>";
+    }).join("");
+
+    var step = function(i){
+      if (i >= files.length) {
+        say("Joining " + files.length + " page" + (files.length > 1 ? "s" : "") + "…", true);
+        return post("/api/finish").then(function(d){
+          render(files, d);
+          say("Read " + files.length + " page" + (files.length > 1 ? "s" : "") + ".", false);
+        });
+      }
+      var f = files[i], li = document.getElementById("q" + i);
+      li.className = "now";
+      li.querySelector(".mark").innerHTML = '<span class="spin"></span>';
+      say("Page " + (i + 1) + " of " + files.length + " — " + f.name, true);
+      return post("/api/page", f, f.name).then(function(d){
+        li.className = "done";
+        li.querySelector(".mark").textContent = "\u2713";
+        li.insertAdjacentHTML("beforeend",
+          ' <span style="opacity:.7">' + d.systems + " systems, " + d.bars +
+          " bars" + (d.rotation ? ", rotated " + d.rotation + "\u00B0" : "") + "</span>");
+        return step(i + 1);
+      }).catch(function(err){
+        li.className = "fail";
+        li.querySelector(".mark").textContent = "\u00D7";
+        throw err;
+      });
+    };
+
+    say("Starting…", true);
+    post("/api/reset").then(function(){ return step(0); })
       .catch(function(err){ say(String(err.message || err), false, true); });
   }
 
@@ -196,10 +248,12 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
     return '<i class="' + (tok.charAt(0) === "-" ? "dr" : "bw") + '">' + tok + "</i>";
   }
 
-  function render(name, d){
-    document.getElementById("title").textContent = name;
-    var facts = [["Key", d.key], ["Systems", d.systems.length], ["Bars", d.bars],
-                 ["Notes", d.notes], ["Ties held", d.ties]];
+  function render(files, d){
+    document.getElementById("title").textContent =
+      files.length === 1 ? files[0].name
+                         : files.length + " pages: " + files.map(function(f){ return f.name; }).join(", ");
+    var facts = [["Key", d.key], ["Pages", d.pages.length], ["Systems", d.systems.length],
+                 ["Bars", d.bars], ["Notes", d.notes], ["Ties held", d.ties]];
     document.getElementById("facts").innerHTML = facts.map(function(f){
       return "<div><b>" + f[0] + "</b><span>" + f[1] + "</span></div>";
     }).join("");
@@ -211,7 +265,7 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
              '</th><td class="tabcell">' + toks + "</td></tr>";
     }).join("");
     document.getElementById("caveat").textContent =
-      "Bars are numbered in order from the top of this page. Without the printed " +
+      "Bars are numbered in order from the first page. Without the printed " +
       "rehearsal numbers there is nothing to cross-check the barlines against, so " +
       "every line reads as draft — count them against the sheet.";
     result.hidden = false;

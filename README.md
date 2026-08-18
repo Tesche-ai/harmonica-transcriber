@@ -19,7 +19,14 @@ The pipeline is numpy/scipy so it cannot run in a browser; `serve.py` serves
 the page and does the work locally. Nothing leaves the machine. HEIC is
 handled, and the page may be sideways -- the rotation is worked out by trying
 each quarter turn and keeping whichever finds the most staves. About 5 seconds
-for a full page. Both the studio and the published chart have a **Save as PDF**
+for a full page.
+
+**Drop in every page of a piece at once.** They are sorted by filename, read
+one at a time with progress shown, then joined. Joining is not concatenation:
+the key signature is pooled across all pages, because pooling is what makes it
+reliable, and bar numbers run straight through, so no page can be finished on
+its own. That is why the API is `/api/reset`, `/api/page` per file, then
+`/api/finish`. Both the studio and the published chart have a **Save as PDF**
 button, which prints through the browser's own engine rather than bundling a
 PDF library.
 
