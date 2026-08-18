@@ -100,6 +100,10 @@ th.brs{white-space:nowrap;font-size:12px;background:var(--surface)}
 #result[hidden]{display:none}
 
 
+
+.tabcell i.iffy{border-bottom:2px dotted var(--alert);padding-bottom:1px}
+.keycheck{color:var(--alert)}
+@media print{.tabcell i.iffy{border-bottom:1px dotted #999}}
 /* ---------- manual correction ---------- */
 .tabcell[contenteditable]{cursor:text;border-radius:3px;outline:0}
 .tabcell[contenteditable]:hover{background:var(--surface-2)}
@@ -173,6 +177,7 @@ tr.edited th.brs{border-left:3px solid var(--blow)}
       <span><b>|</b> bar</span><span><b>&middot;</b> rest</span>
       <span><b>~</b> still holding the tied note</span>
       <span><b class="oor">X</b> outside the harp's range</span>
+      <span><b class="keycheck">dotted</b> unsure &mdash; check this one</span>
     </div>
     <p class="editbar noprint">Click any line to correct it. Enter to confirm, Esc to undo.
       Unknown tokens are flagged in red rather than dropped.</p>
@@ -282,7 +287,12 @@ tr.edited th.brs{border-left:3px solid var(--blow)}
       return "<div><b>" + f[0] + "</b><span>" + f[1] + "</span></div>";
     }).join("");
     document.getElementById("rows").innerHTML = d.systems.map(function(s){
-      var toks = s.tab.split(" ").map(cell).join(" ");
+      var check = {};
+      (s.check || []).forEach(function(i){ check[i] = 1; });
+      var toks = s.tab.split(" ").map(function(tok, i){
+        var h = cell(tok);
+        return check[i] ? h.replace('class="', 'class="iffy ') : h;
+      }).join(" ");
       var badge = s.ok ? '<span class="bdg ok">checked</span>'
                        : '<span class="bdg draft">draft</span>';
       return '<tr><th class="brs">' + s.lo + "\u2013" + s.hi + "<br>" + badge +

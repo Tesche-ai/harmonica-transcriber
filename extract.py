@@ -105,6 +105,7 @@ def run(path, tag):
         y0b, y1b = max(0, top - pad), min(ink.shape[0], bot + pad)
         H, hn = heads.find_heads(ink, space, y0b, y1b)
         H = [h for h in H if -6.5 <= omr.step_at(s, h["x"], h["y"]) <= 12.5]
+        omr.calibrate(s, H)
         bars = heads.find_barlines(hn, s, space, [h["x"] for h in H])
         acc = find_accidentals(hn, space, int(top - space * 2.5), int(bot + space * 2.5))
         if H:

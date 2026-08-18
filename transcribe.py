@@ -115,6 +115,7 @@ def transcribe(path, tag, starts=None, first_bar=1):
         H, hn = heads.find_heads(ink, space, y0b, y1b)
         H = [h for h in H if -6.5 <= omr.step_at(s, h["x"], h["y"]) <= 12.5
              and h["x"] > 150]
+        omr.calibrate(s, H)
         if not H:
             for k in range(want or 1):
                 # tag rest-only systems too, or they all group together as one
@@ -181,6 +182,7 @@ def transcribe(path, tag, starts=None, first_bar=1):
         def spelling_of(h):
             st = omr.step_at(s, h["x"], h["y"])
             letter, octv = heads.step_to_note(st)
+            off = abs(st - round(st))
             # an accidental sits immediately left, on the same line or space
             near = [a for a in acc
                     if 0 < h["x"] - a["x"] < space * 2.4
@@ -191,19 +193,21 @@ def transcribe(path, tag, starts=None, first_bar=1):
             # restates accidentals anyway.
             alt = ({"sharp": 1, "flat": -1, "natural": 0}.get(near[-1]["kind"], 0)
                    if near else None)
-            return letter, octv, alt
+            return letter, octv, alt, off
 
         free = heads.staff_free(ink, s)
         info = {}
         prev_h = prev_midi = None
         for h in sorted(H, key=lambda d: d["x"]):
             spell = spelling_of(h)
+            off = spell[3]
+            spell = spell[:3]
             # Comparing the spelling rather than a pitch number lets this run
             # before the key signature is known, and still tells F# from
             # F-natural, because an explicit accidental is part of the spelling.
             tied = (prev_h is not None and spell == prev_midi
                     and heads.has_tie(free, space, prev_h, h))
-            info[id(h)] = {"spell": spell, "tied": tied}
+            info[id(h)] = {"spell": spell, "tied": tied, "off": off}
             prev_h, prev_midi = h, spell
 
         for j, b in enumerate(buckets):
@@ -213,6 +217,7 @@ def transcribe(path, tag, starts=None, first_bar=1):
                 d = info[id(h)]
                 letter, octv, alt = d["spell"]
                 notes.append({"letter": letter, "octave": octv, "alt": alt,
+                              "off": round(d["off"], 3),
                               "grace": bool(h.get("grace")),
                               "hollow": bool(h.get("hollow")),
                               "explicit": alt is not None,
@@ -236,6 +241,12 @@ def section_of(bar):
     return ""
 
 
+# A notehead sits on a line or in a space. One landing a good fraction of a
+# step away is the reading the eye should check first -- that is where a pitch
+# gets rounded onto the wrong line.
+SUSPECT = 0.22
+
+
 def by_system(all_bars):
     """Group bars back into the staff lines they were printed on.
 
@@ -248,7 +259,10 @@ def by_system(all_bars):
         groups.setdefault(bar.get("sys", "rest"), []).append(bar)
     for key, g in groups.items():
         meas_tab, meas_notes = [], []
+        flags, idx = [], 0
         for bar in g:
+            if meas_tab:
+                idx += 1            # the "|" separator occupies a slot
             toks, names = [], []
             for n in bar["notes"]:
                 if n.get("tied"):
@@ -258,15 +272,22 @@ def by_system(all_bars):
                     prev_hole = t["hole"]
                 toks.append(t["txt"] if t else "X")
                 names.append(n["name"])
+                if n.get("off", 0) >= SUSPECT or not t:
+                    flags.append(idx)
+                idx += 1
             if not toks and bar["notes"]:
                 toks = names = ["~"]    # whole measure is a held note
+                idx += 1
+            if not toks:
+                idx += 1
             meas_tab.append(" ".join(toks) if toks else "-")
             meas_notes.append(" ".join(names) if names else "-")
         rows.append({"lo": g[0]["bar"], "hi": g[-1]["bar"],
                      "section": section_of(g[0]["bar"]),
                      "ok": all(b.get("ok", True) for b in g),
                      "tab": " | ".join(meas_tab),
-                     "notes": " | ".join(meas_notes)})
+                     "notes": " | ".join(meas_notes),
+                     "check": flags})
     return rows
 
 
@@ -337,7 +358,10 @@ def main():
         print("!! " + p)
     ties = sum(1 for b in all_bars for n in b["notes"] if n.get("tied"))
     heads_total = sum(len(b["notes"]) for b in all_bars)
+    shaky = sum(1 for b in all_bars for n in b["notes"] if n.get("off", 0) >= SUSPECT)
     print(f"\n{ties} ties collapsed out of {heads_total} noteheads")
+    print(f"{shaky} noteheads sit more than {SUSPECT} of a step off a staff "
+          f"position -- flagged for checking")
     ok = sum(1 for r in rows if r["ok"])
     print(f"\n{ok}/{len(rows)} systems reconcile with the printed bar numbers")
     for r in rows:

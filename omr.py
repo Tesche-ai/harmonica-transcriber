@@ -128,11 +128,31 @@ def fit_system(sysm):
     lines = np.array(sysm["lines"], dtype=float)          # (nstrip, 5)
     centre = lines.mean(axis=1)
     spacing = np.diff(lines, axis=1).mean(axis=1)
-    deg = 2 if len(xs) >= 6 else 1
+    # The page curls as well as tilts, and a quadratic cannot follow it: the
+    # leftover error showed up as runs of consecutive notes all sitting the
+    # same fraction of a step off, which is how a pitch gets rounded onto the
+    # wrong line. Degree is capped by the number of strips supporting the fit.
+    deg = min(4, max(1, len(xs) // 4))
     cc, mc = _robust_polyfit(xs, centre, deg)
-    sc, ms = _robust_polyfit(xs, spacing, 1)
+    sc, _ = _robust_polyfit(xs, spacing, 1)
+
+    # A strip that locked onto the wrong five lines is off by whole multiples
+    # of the line spacing, not by a random amount. Snapping it back onto the
+    # right rung recovers the strip instead of discarding it, which matters:
+    # throwing them away left some systems fitting from half their strips, and
+    # an unsupported fit drifts far enough to round notes onto the wrong line.
+    for _ in range(3):
+        pred = np.polyval(cc, xs)
+        step = np.polyval(sc, xs)
+        k = np.round((pred - centre) / step)
+        k = np.clip(k, -3, 3)
+        snapped = centre + k * step
+        cc, mc = _robust_polyfit(xs, snapped, deg)
+        sc, _ = _robust_polyfit(xs, spacing, 1)
+
     sysm["fit"] = {"centre": cc, "spacing": sc,
-                   "kept": int(mc.sum()), "n": len(xs)}
+                   "kept": int(mc.sum()), "n": len(xs),
+                   "snapped": int((k != 0).sum())}
     return sysm
 
 
@@ -150,7 +170,27 @@ def step_at(sysm, x, y):
     y0 = line_y(sysm, x, 4)        # bottom line
     y4 = line_y(sysm, x, 0)        # top line
     space = (y0 - y4) / 8.0        # half-space = one diatonic step
-    return (y0 - y) / space
+    return (y0 - y) / space - sysm.get("bias", 0.0)
+
+
+def calibrate(sysm, heads, limit=0.35):
+    """Remove a whole-system offset using the noteheads themselves.
+
+    Every notehead sits on a line or in a space, so if a system's readings are
+    all off by the same fraction of a step, that is the model and not the
+    music. The median is robust to the few genuinely misread heads. A large
+    apparent offset is not trusted -- that would mean something worse is wrong
+    than a calibration error.
+    """
+    sysm["bias"] = 0.0
+    if len(heads) < 4:
+        return 0.0
+    st = np.array([step_at(sysm, h["x"], h["y"]) for h in heads])
+    bias = float(np.median(st - np.round(st)))
+    if abs(bias) > limit:
+        bias = 0.0
+    sysm["bias"] = bias
+    return bias
 
 
 if __name__ == "__main__":

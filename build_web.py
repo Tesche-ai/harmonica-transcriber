@@ -17,7 +17,8 @@ def render_rows(systems):
             current = s["section"]
             rows.append(f'<tr class="secrow"><td colspan="2">{html.escape(current)}</td></tr>')
         cells = []
-        for tok in s["tab"].split():
+        check = set(s.get("check", []))
+        for i, tok in enumerate(s["tab"].split()):
             if tok == "|":
                 cells.append('<i class="bl">|</i>')
             elif tok == "-":
@@ -28,6 +29,8 @@ def render_rows(systems):
                 cells.append('<i class="oor">X</i>')
             else:
                 cls = "dr" if tok.startswith("-") else "bw"
+                if i in check:
+                    cls += " iffy"
                 cells.append(f'<i class="{cls}">{html.escape(tok)}</i>')
         badge = ('<span class="bdg ok">checked</span>' if s["ok"]
                  else '<span class="bdg draft">draft</span>')

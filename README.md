@@ -68,6 +68,16 @@ Four stages, in `omr.py` → `heads.py` → `extract.py` → `transcribe.py`.
 1. **Staff geometry** (`omr.py`). Staff lines are found in narrow vertical
    strips, so local tilt doesn't matter, then fitted as
    `centre(x) + (k-2) * spacing(x)` with iterative outlier rejection.
+   The centre is a degree-4 polynomial, because the page curls as well as
+   tilts and a quadratic cannot follow it — the leftover error showed up as
+   runs of consecutive notes all sitting the same fraction of a step off,
+   which is how a pitch gets rounded onto the wrong line.
+   A strip that locked onto the wrong five lines is off by whole multiples of
+   the spacing, so it is snapped back onto the right rung rather than
+   discarded; discarding left some systems fitting from half their strips.
+   Finally `omr.calibrate` removes any whole-system offset using the
+   noteheads themselves: they all sit on lines or in spaces, so a shared
+   offset is the model, not the music.
    The fit is the whole ballgame: an early version interpolated raw
    per-strip detections, and in dense bars a *beam* got picked up as a staff
    line and bent the geometry, silently shifting every pitch in that bar.
@@ -135,8 +145,10 @@ published per *system* rather than per bar.
   bars 7 and 69 are missing from the output.
 - **Rhythm is not read at all** — only pitch, order and ties. Durations come from
   looking at the sheet.
-- Two notes land outside the harp's range (`X` in the output, around bars 47
-  and 114). Those are misreads.
+- Roughly 7% of noteheads land far enough from a staff position that the pitch
+  could round onto the wrong line. Those carry a dotted underline in the web
+  output — check them first. `transcribe.py` prints the count.
+- Notes outside the harp's range appear as `X`; those are misreads.
 - Accidental classification (sharp/natural/flat, from the vertical extent of
   the left and right strokes) is decent but not verified everywhere.
 
